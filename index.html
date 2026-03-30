@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Motor Fizik Oyunu - Prototip</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        canvas { display: block; background: #87CEEB; } /* Gökyüzü mavisi arka plan */
+        .controls {
+            position: absolute; top: 10px; left: 10px; color: white;
+            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <strong>Kontroller:</strong><br>
+    Gaz: Üst Ok (↑)<br>
+    Fren/Geri: Alt Ok (↓)<br>
+    Denge: Sağ/Sol Ok (← →)<br>
+    Reset: R Tuşu
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// --- OYUN AYARLARI VE FİZİK DEĞİŞKENLERİ ---
+const gravity = 0.2;
+const friction = 0.98;
+const groundY = canvas.height - 100;
+
+let bike = {
+    x: 200,
+    y: groundY - 50,
+    width: 60,
+    height: 15,
+    rotation: 0, // Motorun gövde açısı
+    vX: 0,       // Yatay hız
+    vY: 0,       // Dikey hız
+    vRotation: 0, // Dönme hızı (denge)
+    wheelRadius: 12
+};
+
+const keys = {};
+
+// Klavye dinleyicileri
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function update() {
+    // 1. HAREKET VE GAZ
+    if (keys['ArrowUp']) bike.vX += 0.5;
+    if (keys['ArrowDown']) bike.vX -= 0.3;
+    
+    // 2. DENGE VE ROTASYON (Havada veya yerdeyken motoru eğme)
+    if (keys['ArrowLeft']) bike.vRotation -= 0.005;
+    if (keys['ArrowRight']) bike.vRotation += 0.005;
+
+    // Sürtünme ve Yerçekimi Uygula
+    bike.vX *= friction;
+    bike.vY += gravity;
+    bike.vRotation *= 0.95; // Rotasyon sürtünmesi
+
+    // Pozisyonları Güncelle
+    bike.x += bike.vX;
+    bike.y += bike.vY;
+    bike.rotation += bike.vRotation;
+
+    // 3. YERLE TEMAS KONTROLÜ (Basit Çarpışma)
+    if (bike.y + bike.wheelRadius > groundY) {
+        bike.y = groundY - bike.wheelRadius;
+        bike.vY = 0;
+        
+        // Yerdeyken sürtünme daha fazla olur
+        bike.vX *= 0.99;
+        
+        // Eğer motor çok eğikse (takla attıysa) hızı kes
+        if (Math.abs(bike.rotation) > Math.PI / 2) {
+            bike.vX *= 0.5;
+        }
+    }
+
+    // Ekranın dışına çıkarsa başa sar (Sonsuz yol hissi için basit çözüm)
+    if (bike.x > canvas.width) bike.x = -50;
+    if (bike.x < -50) bike.x = canvas.width;
+
+    // R tuşu ile reset
+    if (keys['KeyR']) {
+        bike.x = 200; bike.y = groundY - 50;
+        bike.vX = 0; bike.vY = 0; bike.rotation = 0;
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // YERİ ÇİZ
+    ctx.fillStyle = "#444";
+    ctx.fillRect(0, groundY, canvas.width, 100);
+
+    // MOTORU ÇİZ (Gövde ve tekerlekler)
+    ctx.save();
+    ctx.translate(bike.x, bike.y);
+    ctx.rotate(bike.rotation);
+
+    // Gövde
+    ctx.fillStyle = "red";
+    ctx.fillRect(-bike.width/2, -bike.height/2, bike.width, bike.height);
+    
+    // Sürücü (Kafa)
+    ctx.beginPath();
+    ctx.arc(0, -25, 8, 0, Math.PI * 2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+
+    // Ön Tekerlek
+    ctx.beginPath();
+    ctx.arc(bike.width/2, bike.height, bike.wheelRadius, 0, Math.PI * 2);
+    ctx.fillStyle = "#333";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.stroke();
+
+    // Arka Tekerlek
+    ctx.beginPath();
+    ctx.arc(-bike.width/2, bike.height, bike.wheelRadius, 0, Math.PI * 2);
+    ctx.fillStyle = "#333";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
