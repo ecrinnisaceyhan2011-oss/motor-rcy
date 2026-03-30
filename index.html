@@ -2,23 +2,43 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Pro Motor Fiziği - V2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pro Moto Mobile - V3</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
-        .ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px;
-            border: 1px solid #444; pointer-events: none;
+        /* Mobil Kontrol Butonları */
+        .mobile-controls {
+            position: absolute; bottom: 20px; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 30px;
+            box-sizing: border-box; pointer-events: none;
         }
-        .speedometer { font-size: 24px; color: #00ff00; }
+        .btn {
+            width: 70px; height: 70px; background: rgba(255,255,255,0.2);
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; color: white; font-weight: bold;
+            pointer-events: auto; user-select: none; border: 2px solid rgba(255,255,255,0.3);
+        }
+        .btn:active { background: rgba(255,255,255,0.5); }
+        .stats {
+            position: absolute; top: 10px; left: 10px; color: #0f0;
+            background: rgba(0,0,0,0.6); padding: 8px; border-radius: 5px; font-family: monospace;
+        }
     </style>
 </head>
 <body>
 
-<div class="ui">
-    <div class="speedometer">Hız: <span id="speedText">0</span> km/h</div>
-    <p>Gaz: ↑ | Fren: ↓ | Denge: ← → | Reset: R</p>
+<div class="stats">HIZ: <span id="spd">0</span></div>
+
+<div class="mobile-controls">
+    <div style="display: flex; gap: 15px;">
+        <div class="btn" id="btnLeft">←</div>
+        <div class="btn" id="btnRight">→</div>
+    </div>
+    <div style="display: flex; gap: 15px;">
+        <div class="btn" id="btnBack">FREN</div>
+        <div class="btn" id="btnGas" style="background: rgba(0,255,0,0.3)">GAZ</div>
+    </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -26,127 +46,132 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const speedText = document.getElementById('speedText');
+const spdElement = document.getElementById('spd');
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-// --- OYUN AYARLARI ---
-const physics = {
-    gravity: 0.25,
-    friction: 0.985,
-    groundPoints: []
-};
-
-let bike = {
-    x: 100, y: 0,
-    vX: 0, vY: 0,
-    angle: 0, vAngle: 0,
-    wheelSize: 18,
-    suspension: 15 // Tekerleklerin gövdeden uzaklığı
-};
-
-// 1. PROFESYONEL ARAZİ OLUŞTURMA (Tepeler)
-function generateTerrain() {
-    for (let i = 0; i < 5000; i += 20) {
-        // Sinüs dalgaları ile doğal görünümlü tepeler oluşturuyoruz
-        let height = Math.sin(i * 0.01) * 40 + Math.sin(i * 0.005) * 80 + (canvas.height - 150);
-        physics.groundPoints.push({ x: i, y: height });
-    }
+// Ekran boyutunu ayarla
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
-generateTerrain();
+window.addEventListener('resize', resize);
+resize();
 
-const keys = {};
-window.onkeydown = e => keys[e.code] = true;
-window.onkeyup = e => keys[e.code] = false;
+// --- FİZİK VE DÜNYA ---
+let bike = {
+    x: 100, y: 0, vX: 0, vY: 0,
+    angle: 0, vAngle: 0,
+    wR: 15, // Tekerlek yarıçapı
+    length: 50
+};
 
-function getGroundHeight(x) {
-    // Motorun o anki X konumundaki yerin yüksekliğini bulur
-    const point = physics.groundPoints.find(p => p.x >= x);
-    return point ? point.y : canvas.height;
+let terrain = [];
+const step = 25;
+for(let i=0; i<1000; i++) {
+    terrain.push({
+        x: i * step,
+        y: canvas.height/1.5 + Math.sin(i*0.1)*40 + Math.sin(i*0.05)*60
+    });
+}
+
+const keys = { gas: false, back: false, left: false, right: false };
+
+// Mobil Dokunmatik Kontroller
+const bindBtn = (id, key) => {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+    el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+    // PC desteği için:
+    el.addEventListener('mousedown', () => keys[key] = true);
+    el.addEventListener('mouseup', () => keys[key] = false);
+};
+bindBtn('btnGas', 'gas'); bindBtn('btnBack', 'back');
+bindBtn('btnLeft', 'left'); bindBtn('btnRight', 'right');
+
+// Klavye desteği
+window.onkeydown = e => {
+    if(e.key === "ArrowUp") keys.gas = true;
+    if(e.key === "ArrowDown") keys.back = true;
+    if(e.key === "ArrowLeft") keys.left = true;
+    if(e.key === "ArrowRight") keys.right = true;
+};
+window.onkeyup = e => {
+    if(e.key === "ArrowUp") keys.gas = false;
+    if(e.key === "ArrowDown") keys.back = false;
+    if(e.key === "ArrowLeft") keys.left = false;
+    if(e.key === "ArrowRight") keys.right = false;
+};
+
+function getTerrainY(x) {
+    let index = Math.floor(x / step);
+    if(index < 0) return terrain[0].y;
+    if(index >= terrain.length - 1) return terrain[terrain.length-1].y;
+    
+    // İki nokta arasında yumuşak geçiş (Interpolation)
+    let p1 = terrain[index];
+    let p2 = terrain[index+1];
+    let t = (x - p1.x) / (p2.x - p1.x);
+    return p1.y + t * (p2.y - p1.y);
 }
 
 function update() {
-    // Hareket Kontrolü
-    if (keys['ArrowUp']) bike.vX += 0.4;
-    if (keys['ArrowDown']) bike.vX -= 0.2;
-    if (keys['ArrowLeft']) bike.vAngle -= 0.004;
-    if (keys['ArrowRight']) bike.vAngle += 0.004;
+    if(keys.gas) bike.vX += 0.35;
+    if(keys.back) bike.vX -= 0.2;
+    if(keys.left) bike.vAngle -= 0.005;
+    if(keys.right) bike.vAngle += 0.005;
 
-    bike.vX *= physics.friction;
-    bike.vY += physics.gravity;
-    bike.vAngle *= 0.9;
+    bike.vY += 0.25; // Yerçekimi
+    bike.vX *= 0.98; // Sürtünme
+    bike.vAngle *= 0.92;
 
     bike.x += bike.vX;
     bike.y += bike.vY;
     bike.angle += bike.vAngle;
 
-    // Zeminle Etkileşim
-    let currentGround = getGroundHeight(bike.x);
-    if (bike.y + bike.wheelSize + bike.suspension > currentGround) {
-        bike.y = currentGround - bike.wheelSize - bike.suspension;
-        bike.vY *= -0.2; // Hafif bir zıplama etkisi (Süspansiyon)
+    // Tekerleklerin yere değme kontrolü
+    let groundY = getTerrainY(bike.x);
+    let bikeBottom = bike.y + 20;
+
+    if(bikeBottom > groundY) {
+        bike.y = groundY - 20;
+        bike.vY = 0;
         
-        // Arazi eğimine göre motoru otomatik hizalamaya çalış (Daha pro hissettirir)
-        let nextGround = getGroundHeight(bike.x + 5);
-        let slope = Math.atan2(nextGround - currentGround, 5);
-        bike.angle += (slope - bike.angle) * 0.1;
+        // Araziye göre açıyı otomatik ayarla (Daha yumuşak sürüş)
+        let angleTarget = Math.atan2(getTerrainY(bike.x+5) - groundY, 5);
+        bike.angle += (angleTarget - bike.angle) * 0.15;
     }
 
-    // UI Güncelleme
-    speedText.innerText = Math.floor(Math.abs(bike.vX) * 10);
-    
-    if (keys['KeyR']) { bike.x = 100; bike.vX = 0; bike.vY = 0; bike.angle = 0; }
+    spdElement.innerText = Math.abs(Math.floor(bike.vX * 5));
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0,0,canvas.width, canvas.height);
 
-    // KAMERA TAKİBİ (Dünyayı motorun tersine kaydırıyoruz)
     ctx.save();
-    ctx.translate(-bike.x + 200, 0);
+    ctx.translate(-bike.x + 150, 0); // Kamera takibi
 
-    // ARAZİ ÇİZİMİ
+    // Yer Çizimi
     ctx.beginPath();
-    ctx.moveTo(physics.groundPoints[0].x, canvas.height);
-    for (let p of physics.groundPoints) {
-        ctx.lineTo(p.x, p.y);
-    }
-    ctx.lineTo(physics.groundPoints[physics.groundPoints.length-1].x, canvas.height);
-    ctx.fillStyle = "#333";
+    ctx.moveTo(terrain[0].x, canvas.height);
+    for(let p of terrain) ctx.lineTo(p.x, p.y);
+    ctx.lineTo(terrain[terrain.length-1].x, canvas.height);
+    ctx.fillStyle = "#2d5a27";
     ctx.fill();
-    ctx.strokeStyle = "#4CAF50"; // Çim çizgisi
-    ctx.lineWidth = 4;
-    ctx.stroke();
 
-    // MOTOR ÇİZİMİ
+    // Motor Çizimi
     ctx.translate(bike.x, bike.y);
     ctx.rotate(bike.angle);
 
-    // Gövde (Daha ince tasarım)
-    ctx.fillStyle = "#e74c3c";
-    ctx.fillRect(-30, -5, 60, 10);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(-10, -20, 20, 15); // Yakıt deposu alanı
+    // Gövde - Daha detaylı
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.moveTo(-25, 5); ctx.lineTo(25, 5); ctx.lineTo(15, -15); ctx.lineTo(-15, -15);
+    ctx.fill();
+    
+    // Kask/Sürücü
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(0, -22, 7, 0, Math.PI*2); ctx.fill();
 
     // Tekerlekler
-    ctx.fillStyle = "#111";
-    ctx.beginPath(); // Arka
-    ctx.arc(-25, bike.suspension, bike.wheelSize, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath(); // Ön
-    ctx.arc(25, bike.suspension, bike.wheelSize, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.restore();
-}
-
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-loop();
-</script>
-</body>
-</html>
+    ctx.fillStyle = "#000";
+    ctx.beginPath(); ctx.arc(-22, 15, 12, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(22, 15, 12, 0, Math.PI*2); ctx.fill();
