@@ -3,35 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Pro Moto Rider - V4</title>
+    <title>Night Rider Pro - V5</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #0a0a0a; touch-action: none; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #02050a; touch-action: none; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
-        /* Kontrol Paneli */
+        .stats {
+            position: absolute; top: 20px; left: 20px; color: #00d4ff;
+            background: rgba(0,10,20,0.8); padding: 12px; border-radius: 8px; border: 1px solid #005577;
+        }
         #ui {
             position: absolute; bottom: 40px; width: 100%;
-            display: flex; justify-content: space-between; padding: 0 40px;
-            box-sizing: border-box; pointer-events: none;
+            display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; pointer-events: none;
         }
         .btn {
-            width: 85px; height: 85px; background: rgba(255,255,255,0.1);
-            border: 3px solid rgba(255,255,255,0.4); border-radius: 20px;
+            width: 80px; height: 80px; background: rgba(0,100,255,0.15);
+            border: 2px solid rgba(0,212,255,0.4); border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; pointer-events: auto;
-            user-select: none; -webkit-tap-highlight-color: transparent;
+            color: #00d4ff; font-weight: bold; pointer-events: auto; user-select: none;
         }
-        .btn:active { background: rgba(0,255,100,0.4); transform: scale(0.95); }
-        .stats {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; border-left: 5px solid #0f0;
-        }
+        .btn:active { background: rgba(0,212,255,0.5); transform: scale(0.9); }
     </style>
 </head>
 <body>
 
 <div class="stats">
-    <div style="font-size: 12px; opacity: 0.7;">HIZ GÖSTERGESİ</div>
-    <div id="speed" style="font-size: 24px; font-weight: bold; color: #0f0;">00 km/h</div>
+    <div style="font-size: 10px; letter-spacing: 2px;">NIGHT VELOCITY</div>
+    <div id="speed" style="font-size: 26px; font-weight: bold; text-shadow: 0 0 10px #00d4ff;">000</div>
 </div>
 
 <div id="ui">
@@ -40,8 +37,8 @@
         <div class="btn" id="right">→</div>
     </div>
     <div style="display: flex; gap: 20px;">
-        <div class="btn" id="brake" style="border-color: #f44;">FREN</div>
-        <div class="btn" id="gas" style="border-color: #0f0;">GAZ</div>
+        <div class="btn" id="brake" style="border-color: #ff3366; color: #ff3366;">FREN</div>
+        <div class="btn" id="gas" style="border-color: #00ffaa; color: #00ffaa;">GAZ</div>
     </div>
 </div>
 
@@ -52,171 +49,110 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
 let w, h;
+const stars = [];
 function resize() {
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
+    // Yıldızları bir kez oluştur
+    stars.length = 0;
+    for(let i=0; i<150; i++) {
+        stars.push({ x: Math.random()*w, y: Math.random()*(h*0.6), s: Math.random()*2, o: Math.random() });
+    }
 }
 window.onresize = resize;
 resize();
 
-// --- OYUN AYARLARI ---
-const physics = { gravity: 0.3, friction: 0.985, ground: [] };
-for(let i=0; i<3000; i++) {
-    physics.ground.push({
-        x: i * 50,
-        y: h*0.75 + Math.sin(i*0.1)*50 + Math.sin(i*0.04)*100 
-    });
+const physics = { gravity: 0.28, friction: 0.985, ground: [] };
+for(let i=0; i<4000; i++) {
+    physics.ground.push({ x: i*50, y: h*0.78 + Math.sin(i*0.12)*45 + Math.sin(i*0.04)*80 });
 }
 
-const player = {
-    x: 200, y: 100, vX: 0, vY: 0,
-    angle: 0, vAngle: 0,
-    wR: 20, // Tekerlek büyüklüğü
-    dist: 30 // Tekerleklerin gövdeden uzaklığı
-};
-
+const p = { x: 200, y: 100, vX: 0, vY: 0, angle: 0, vA: 0 };
 const keys = { gas: 0, brake: 0, left: 0, right: 0 };
 
-// --- KONTROL BAĞLANTILARI ---
 function bind(id, k) {
     const el = document.getElementById(id);
-    const start = (e) => { e.preventDefault(); keys[k] = 1; };
-    const end = (e) => { e.preventDefault(); keys[k] = 0; };
-    el.onmousedown = start; el.onmouseup = end;
-    el.ontouchstart = start; el.ontouchend = end;
+    const s = (e) => { e.preventDefault(); keys[k] = 1; };
+    const e = (e) => { e.preventDefault(); keys[k] = 0; };
+    el.onmousedown = el.ontouchstart = s;
+    el.onmouseup = el.ontouchend = e;
 }
-bind('gas', 'gas'); bind('brake', 'brake'); bind('left', 'left'); bind('right', 'right');
+bind('gas','gas'); bind('brake','brake'); bind('left','left'); bind('right','right');
 
-// Klavye
-window.onkeydown = (e) => {
-    if(e.code == 'ArrowUp') keys.gas = 1;
-    if(e.code == 'ArrowDown') keys.brake = 1;
-    if(e.code == 'ArrowLeft') keys.left = 1;
-    if(e.code == 'ArrowRight') keys.right = 1;
-};
-window.onkeyup = (e) => {
-    if(e.code == 'ArrowUp') keys.gas = 0;
-    if(e.code == 'ArrowDown') keys.brake = 0;
-    if(e.code == 'ArrowLeft') keys.left = 0;
-    if(e.code == 'ArrowRight') keys.right = 0;
-};
+function getH(x) {
+    const i = Math.floor(x/50);
+    if(i<0) return h;
+    const p1 = physics.ground[i], p2 = physics.ground[i+1] || p1;
+    return p1.y + ((x-p1.x)/50)*(p2.y-p1.y);
+}
 
-function getFloor(x) {
-    const i = Math.floor(x / 50);
-    if(i < 0) return h;
-    const p1 = physics.ground[i];
-    const p2 = physics.ground[i+1] || p1;
-    const t = (x - p1.x) / 50;
-    return p1.y + t * (p2.y - p1.y);
+function drawBackground() {
+    // Gökyüzü Gradient
+    let grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#02050a');
+    grad.addColorStop(1, '#0a1525');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Ay
+    ctx.fillStyle = '#e1e8f0';
+    ctx.shadowBlur = 40; ctx.shadowColor = '#fff';
+    ctx.beginPath(); ctx.arc(w - 100, 100, 40, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Yıldızlar
+    stars.forEach(s => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(Math.sin(Date.now()*0.001 + s.o))})`; // Parlama efekti
+        ctx.fillRect(s.x, s.y, s.s, s.s);
+    });
 }
 
 function update() {
-    if(keys.gas) player.vX += 0.5;
-    if(keys.brake) player.vX -= 0.3;
-    if(keys.left) player.vAngle -= 0.007;
-    if(keys.right) player.vAngle += 0.007;
+    if(keys.gas) p.vX += 0.45;
+    if(keys.brake) p.vX -= 0.3;
+    if(keys.left) p.vA -= 0.006;
+    if(keys.right) p.vA += 0.006;
 
-    player.vY += physics.gravity;
-    player.vX *= physics.friction;
-    player.vAngle *= 0.92;
+    p.vY += physics.gravity; p.vX *= physics.friction; p.vA *= 0.9;
+    p.x += p.vX; p.y += p.vY; p.angle += p.vA;
 
-    player.x += player.vX;
-    player.y += player.vY;
-    player.angle += player.vAngle;
-
-    // Tekerleklerin yere çarpma kontrolü
-    const cos = Math.cos(player.angle);
-    const sin = Math.sin(player.angle);
-    
-    // Arka ve ön tekerlek noktaları
-    const wheels = [
-        { x: player.x - cos*player.dist, y: player.y - sin*player.dist + 15 },
-        { x: player.x + cos*player.dist, y: player.y + sin*player.dist + 15 }
-    ];
-
-    wheels.forEach((w, i) => {
-        const floorY = getFloor(w.x);
-        if(w.y + player.wR > floorY) {
-            player.y -= (w.y + player.wR - floorY) * 0.8;
-            player.vY *= 0.2;
-            // Yere değince motorun açısını araziye uydur
-            if(i == 0) player.vAngle += 0.01; else player.vAngle -= 0.01;
+    const wheels = [p.x - Math.cos(p.angle)*30, p.x + Math.cos(p.angle)*30];
+    wheels.forEach((wx, i) => {
+        const gy = getH(wx);
+        if(p.y + 35 > gy) {
+            p.y = gy - 35; p.vY *= 0.1;
+            p.vA += (i==0 ? 0.008 : -0.008);
+            let slope = Math.atan2(getH(p.x+5) - getH(p.x-5), 10);
+            p.angle += (slope - p.angle) * 0.1;
         }
     });
-
-    document.getElementById('speed').innerText = Math.floor(Math.abs(player.vX * 6)) + " km/h";
+    document.getElementById('speed').innerText = Math.floor(Math.abs(p.vX*7)).toString().padStart(3, '0');
 }
 
-function drawMotor(ctx) {
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle);
+function draw() {
+    drawBackground();
+    ctx.save(); ctx.translate(-p.x + 200, 0);
 
-    // --- MOTOR GÖVDESİ ---
-    ctx.fillStyle = "#e74c3c"; // Ana renk Kırmızı
-    ctx.beginPath();
-    ctx.moveTo(-25, 0);
-    ctx.lineTo(20, 0); 
-    ctx.lineTo(25, -15); // Ön panel
-    ctx.lineTo(5, -20);  // Depo üstü
-    ctx.lineTo(-20, -15); // Sele altı
-    ctx.closePath();
-    ctx.fill();
-    
-    // Motor Blogu (Gri kısım)
-    ctx.fillStyle = "#555";
-    ctx.fillRect(-10, 0, 20, 15);
-
-    // Gidon ve Kask
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(15, -15); ctx.lineTo(22, -30); ctx.stroke();
-    ctx.fillStyle = "#3498db"; // Kask Mavi
-    ctx.beginPath(); ctx.arc(5, -35, 8, 0, 7); ctx.fill();
-
-    // TEKERLEKLER (Detaylı Jantlı)
-    const drawWheel = (x, y) => {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(player.x * 0.1); // Hareket ettikçe döner
-        ctx.fillStyle = "#222";
-        ctx.beginPath(); ctx.arc(0, 0, player.wR, 0, 7); ctx.fill();
-        ctx.strokeStyle = "#666";
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-player.wR, 0); ctx.lineTo(player.wR, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, -player.wR); ctx.lineTo(0, player.wR); ctx.stroke();
-        ctx.restore();
-    };
-
-    drawWheel(-player.dist, 15); // Arka
-    drawWheel(player.dist, 15);  // Ön
-
-    ctx.restore();
-}
-
-function loop() {
-    update();
-    
-    ctx.fillStyle = "#111";
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.save();
-    ctx.translate(-player.x + 200, 0); // Kamera
-
-    // Arazi
-    ctx.beginPath();
-    ctx.moveTo(physics.ground[0].x, h);
-    for(let p of physics.ground) ctx.lineTo(p.x, p.y);
+    // Arazi (Daha karanlık ve neon çizgili)
+    ctx.beginPath(); ctx.moveTo(physics.ground[0].x, h);
+    physics.ground.forEach(pt => ctx.lineTo(pt.x, pt.y));
     ctx.lineTo(physics.ground[physics.ground.length-1].x, h);
-    ctx.fillStyle = "#222"; ctx.fill();
-    ctx.strokeStyle = "#0f0"; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#050505'; ctx.fill();
+    ctx.strokeStyle = '#005577'; ctx.lineWidth = 4; ctx.stroke();
 
-    drawMotor(ctx);
+    // Motor
+    ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+    ctx.fillStyle = '#ff3366'; ctx.fillRect(-25, -5, 50, 12); // Gövde
+    ctx.fillStyle = '#222'; // Tekerlekler
+    ctx.beginPath(); ctx.arc(-25, 20, 18, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(25, 20, 18, 0, 7); ctx.fill();
+    ctx.fillStyle = '#33ccff'; ctx.beginPath(); ctx.arc(5, -25, 8, 0, 7); ctx.fill(); // Kask
 
     ctx.restore();
-    requestAnimationFrame(loop);
+    update();
+    requestAnimationFrame(draw);
 }
-loop();
+draw();
 </script>
 </body>
 </html>
