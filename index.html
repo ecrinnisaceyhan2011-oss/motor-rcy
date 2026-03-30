@@ -2,176 +2,86 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Moto Mobile - V3</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Ultimate Moto Physics Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; touch-action: none; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; touch-action: none; }
         canvas { display: block; }
-        /* Mobil Kontrol Butonları */
-        .mobile-controls {
-            position: absolute; bottom: 20px; width: 100%;
-            display: flex; justify-content: space-between; padding: 0 30px;
-            box-sizing: border-box; pointer-events: none;
+        /* Mobil Kontroller */
+        #ui {
+            position: absolute; bottom: 30px; width: 100%;
+            display: flex; justify-content: space-around; pointer-events: none;
         }
+        .control-group { display: flex; gap: 20px; pointer-events: auto; }
         .btn {
-            width: 70px; height: 70px; background: rgba(255,255,255,0.2);
-            border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; color: white; font-weight: bold;
-            pointer-events: auto; user-select: none; border: 2px solid rgba(255,255,255,0.3);
+            width: 80px; height: 80px; background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-family: sans-serif;
+            user-select: none; -webkit-tap-highlight-color: transparent;
         }
-        .btn:active { background: rgba(255,255,255,0.5); }
-        .stats {
-            position: absolute; top: 10px; left: 10px; color: #0f0;
-            background: rgba(0,0,0,0.6); padding: 8px; border-radius: 5px; font-family: monospace;
+        .btn:active { background: rgba(255,255,255,0.4); transform: scale(0.9); }
+        #speedo {
+            position: absolute; top: 20px; right: 20px; color: #0f0;
+            font-family: 'Courier New', monospace; font-size: 20px;
+            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;
         }
     </style>
 </head>
 <body>
 
-<div class="stats">HIZ: <span id="spd">0</span></div>
+<div id="speedo">000 KM/H</div>
 
-<div class="mobile-controls">
-    <div style="display: flex; gap: 15px;">
-        <div class="btn" id="btnLeft">←</div>
-        <div class="btn" id="btnRight">→</div>
+<div id="ui">
+    <div class="control-group">
+        <div class="btn" id="btnLeft">SOL</div>
+        <div class="btn" id="btnRight">SAĞ</div>
     </div>
-    <div style="display: flex; gap: 15px;">
-        <div class="btn" id="btnBack">FREN</div>
-        <div class="btn" id="btnGas" style="background: rgba(0,255,0,0.3)">GAZ</div>
+    <div class="control-group">
+        <div class="btn" id="btnBrake" style="color: #ff4444;">FREN</div>
+        <div class="btn" id="btnGas" style="color: #44ff44;">GAZ</div>
     </div>
 </div>
 
-<canvas id="gameCanvas"></canvas>
+<canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
+const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const spdElement = document.getElementById('spd');
+const speedo = document.getElementById('speedo');
 
-// Ekran boyutunu ayarla
+let w, h;
 function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
 }
-window.addEventListener('resize', resize);
+window.onresize = resize;
 resize();
 
-// --- FİZİK VE DÜNYA ---
-let bike = {
-    x: 100, y: 0, vX: 0, vY: 0,
-    angle: 0, vAngle: 0,
-    wR: 15, // Tekerlek yarıçapı
-    length: 50
+// --- PROFESYONEL FİZİK MOTORU ---
+const world = {
+    gravity: 0.25,
+    friction: 0.98,
+    ground: []
 };
 
-let terrain = [];
-const step = 25;
-for(let i=0; i<1000; i++) {
-    terrain.push({
-        x: i * step,
-        y: canvas.height/1.5 + Math.sin(i*0.1)*40 + Math.sin(i*0.05)*60
+// Arazi oluşturma (Daha yumuşak ve uzun bir yol)
+for(let i=0; i<2000; i++) {
+    world.ground.push({
+        x: i * 40,
+        y: h*0.7 + Math.sin(i*0.15)*30 + Math.sin(i*0.05)*70
     });
 }
 
-const keys = { gas: false, back: false, left: false, right: false };
-
-// Mobil Dokunmatik Kontroller
-const bindBtn = (id, key) => {
-    const el = document.getElementById(id);
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
-    el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
-    // PC desteği için:
-    el.addEventListener('mousedown', () => keys[key] = true);
-    el.addEventListener('mouseup', () => keys[key] = false);
-};
-bindBtn('btnGas', 'gas'); bindBtn('btnBack', 'back');
-bindBtn('btnLeft', 'left'); bindBtn('btnRight', 'right');
-
-// Klavye desteği
-window.onkeydown = e => {
-    if(e.key === "ArrowUp") keys.gas = true;
-    if(e.key === "ArrowDown") keys.back = true;
-    if(e.key === "ArrowLeft") keys.left = true;
-    if(e.key === "ArrowRight") keys.right = true;
-};
-window.onkeyup = e => {
-    if(e.key === "ArrowUp") keys.gas = false;
-    if(e.key === "ArrowDown") keys.back = false;
-    if(e.key === "ArrowLeft") keys.left = false;
-    if(e.key === "ArrowRight") keys.right = false;
+const bike = {
+    x: 200, y: 300,
+    vX: 0, vY: 0,
+    angle: 0, vAngle: 0,
+    wheelR: 18,
+    suspension: 20, // Yayın esneme payı
+    hp: 0.6 // Motor gücü
 };
 
-function getTerrainY(x) {
-    let index = Math.floor(x / step);
-    if(index < 0) return terrain[0].y;
-    if(index >= terrain.length - 1) return terrain[terrain.length-1].y;
-    
-    // İki nokta arasında yumuşak geçiş (Interpolation)
-    let p1 = terrain[index];
-    let p2 = terrain[index+1];
-    let t = (x - p1.x) / (p2.x - p1.x);
-    return p1.y + t * (p2.y - p1.y);
-}
+const input = { gas: 0, brake: 0, left: 0, right: 0 };
 
-function update() {
-    if(keys.gas) bike.vX += 0.35;
-    if(keys.back) bike.vX -= 0.2;
-    if(keys.left) bike.vAngle -= 0.005;
-    if(keys.right) bike.vAngle += 0.005;
-
-    bike.vY += 0.25; // Yerçekimi
-    bike.vX *= 0.98; // Sürtünme
-    bike.vAngle *= 0.92;
-
-    bike.x += bike.vX;
-    bike.y += bike.vY;
-    bike.angle += bike.vAngle;
-
-    // Tekerleklerin yere değme kontrolü
-    let groundY = getTerrainY(bike.x);
-    let bikeBottom = bike.y + 20;
-
-    if(bikeBottom > groundY) {
-        bike.y = groundY - 20;
-        bike.vY = 0;
-        
-        // Araziye göre açıyı otomatik ayarla (Daha yumuşak sürüş)
-        let angleTarget = Math.atan2(getTerrainY(bike.x+5) - groundY, 5);
-        bike.angle += (angleTarget - bike.angle) * 0.15;
-    }
-
-    spdElement.innerText = Math.abs(Math.floor(bike.vX * 5));
-}
-
-function draw() {
-    ctx.clearRect(0,0,canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(-bike.x + 150, 0); // Kamera takibi
-
-    // Yer Çizimi
-    ctx.beginPath();
-    ctx.moveTo(terrain[0].x, canvas.height);
-    for(let p of terrain) ctx.lineTo(p.x, p.y);
-    ctx.lineTo(terrain[terrain.length-1].x, canvas.height);
-    ctx.fillStyle = "#2d5a27";
-    ctx.fill();
-
-    // Motor Çizimi
-    ctx.translate(bike.x, bike.y);
-    ctx.rotate(bike.angle);
-
-    // Gövde - Daha detaylı
-    ctx.fillStyle = "red";
-    ctx.beginPath();
-    ctx.moveTo(-25, 5); ctx.lineTo(25, 5); ctx.lineTo(15, -15); ctx.lineTo(-15, -15);
-    ctx.fill();
-    
-    // Kask/Sürücü
-    ctx.fillStyle = "white";
-    ctx.beginPath(); ctx.arc(0, -22, 7, 0, Math.PI*2); ctx.fill();
-
-    // Tekerlekler
-    ctx.fillStyle = "#000";
-    ctx.beginPath(); ctx.arc(-22, 15, 12, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(22, 15, 12, 0, Math.PI*2); ctx.fill();
+// Kontrol Fonksiyonları (Hem Mobil
