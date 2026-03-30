@@ -2,24 +2,23 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Motor Fizik Oyunu - Prototip</title>
+    <title>Pro Motor Fiziği - V2</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        canvas { display: block; background: #87CEEB; } /* Gökyüzü mavisi arka plan */
-        .controls {
-            position: absolute; top: 10px; left: 10px; color: white;
-            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; }
+        .ui {
+            position: absolute; top: 20px; left: 20px; color: #fff;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px;
+            border: 1px solid #444; pointer-events: none;
         }
+        .speedometer { font-size: 24px; color: #00ff00; }
     </style>
 </head>
 <body>
 
-<div class="controls">
-    <strong>Kontroller:</strong><br>
-    Gaz: Üst Ok (↑)<br>
-    Fren/Geri: Alt Ok (↓)<br>
-    Denge: Sağ/Sol Ok (← →)<br>
-    Reset: R Tuşu
+<div class="ui">
+    <div class="speedometer">Hız: <span id="speedText">0</span> km/h</div>
+    <p>Gaz: ↑ | Fren: ↓ | Denge: ← → | Reset: R</p>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -27,125 +26,127 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const speedText = document.getElementById('speedText');
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- OYUN AYARLARI VE FİZİK DEĞİŞKENLERİ ---
-const gravity = 0.2;
-const friction = 0.98;
-const groundY = canvas.height - 100;
-
-let bike = {
-    x: 200,
-    y: groundY - 50,
-    width: 60,
-    height: 15,
-    rotation: 0, // Motorun gövde açısı
-    vX: 0,       // Yatay hız
-    vY: 0,       // Dikey hız
-    vRotation: 0, // Dönme hızı (denge)
-    wheelRadius: 12
+// --- OYUN AYARLARI ---
+const physics = {
+    gravity: 0.25,
+    friction: 0.985,
+    groundPoints: []
 };
 
-const keys = {};
+let bike = {
+    x: 100, y: 0,
+    vX: 0, vY: 0,
+    angle: 0, vAngle: 0,
+    wheelSize: 18,
+    suspension: 15 // Tekerleklerin gövdeden uzaklığı
+};
 
-// Klavye dinleyicileri
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
+// 1. PROFESYONEL ARAZİ OLUŞTURMA (Tepeler)
+function generateTerrain() {
+    for (let i = 0; i < 5000; i += 20) {
+        // Sinüs dalgaları ile doğal görünümlü tepeler oluşturuyoruz
+        let height = Math.sin(i * 0.01) * 40 + Math.sin(i * 0.005) * 80 + (canvas.height - 150);
+        physics.groundPoints.push({ x: i, y: height });
+    }
+}
+generateTerrain();
+
+const keys = {};
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
+
+function getGroundHeight(x) {
+    // Motorun o anki X konumundaki yerin yüksekliğini bulur
+    const point = physics.groundPoints.find(p => p.x >= x);
+    return point ? point.y : canvas.height;
+}
 
 function update() {
-    // 1. HAREKET VE GAZ
-    if (keys['ArrowUp']) bike.vX += 0.5;
-    if (keys['ArrowDown']) bike.vX -= 0.3;
-    
-    // 2. DENGE VE ROTASYON (Havada veya yerdeyken motoru eğme)
-    if (keys['ArrowLeft']) bike.vRotation -= 0.005;
-    if (keys['ArrowRight']) bike.vRotation += 0.005;
+    // Hareket Kontrolü
+    if (keys['ArrowUp']) bike.vX += 0.4;
+    if (keys['ArrowDown']) bike.vX -= 0.2;
+    if (keys['ArrowLeft']) bike.vAngle -= 0.004;
+    if (keys['ArrowRight']) bike.vAngle += 0.004;
 
-    // Sürtünme ve Yerçekimi Uygula
-    bike.vX *= friction;
-    bike.vY += gravity;
-    bike.vRotation *= 0.95; // Rotasyon sürtünmesi
+    bike.vX *= physics.friction;
+    bike.vY += physics.gravity;
+    bike.vAngle *= 0.9;
 
-    // Pozisyonları Güncelle
     bike.x += bike.vX;
     bike.y += bike.vY;
-    bike.rotation += bike.vRotation;
+    bike.angle += bike.vAngle;
 
-    // 3. YERLE TEMAS KONTROLÜ (Basit Çarpışma)
-    if (bike.y + bike.wheelRadius > groundY) {
-        bike.y = groundY - bike.wheelRadius;
-        bike.vY = 0;
+    // Zeminle Etkileşim
+    let currentGround = getGroundHeight(bike.x);
+    if (bike.y + bike.wheelSize + bike.suspension > currentGround) {
+        bike.y = currentGround - bike.wheelSize - bike.suspension;
+        bike.vY *= -0.2; // Hafif bir zıplama etkisi (Süspansiyon)
         
-        // Yerdeyken sürtünme daha fazla olur
-        bike.vX *= 0.99;
-        
-        // Eğer motor çok eğikse (takla attıysa) hızı kes
-        if (Math.abs(bike.rotation) > Math.PI / 2) {
-            bike.vX *= 0.5;
-        }
+        // Arazi eğimine göre motoru otomatik hizalamaya çalış (Daha pro hissettirir)
+        let nextGround = getGroundHeight(bike.x + 5);
+        let slope = Math.atan2(nextGround - currentGround, 5);
+        bike.angle += (slope - bike.angle) * 0.1;
     }
 
-    // Ekranın dışına çıkarsa başa sar (Sonsuz yol hissi için basit çözüm)
-    if (bike.x > canvas.width) bike.x = -50;
-    if (bike.x < -50) bike.x = canvas.width;
-
-    // R tuşu ile reset
-    if (keys['KeyR']) {
-        bike.x = 200; bike.y = groundY - 50;
-        bike.vX = 0; bike.vY = 0; bike.rotation = 0;
-    }
+    // UI Güncelleme
+    speedText.innerText = Math.floor(Math.abs(bike.vX) * 10);
+    
+    if (keys['KeyR']) { bike.x = 100; bike.vX = 0; bike.vY = 0; bike.angle = 0; }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // YERİ ÇİZ
-    ctx.fillStyle = "#444";
-    ctx.fillRect(0, groundY, canvas.width, 100);
-
-    // MOTORU ÇİZ (Gövde ve tekerlekler)
+    // KAMERA TAKİBİ (Dünyayı motorun tersine kaydırıyoruz)
     ctx.save();
+    ctx.translate(-bike.x + 200, 0);
+
+    // ARAZİ ÇİZİMİ
+    ctx.beginPath();
+    ctx.moveTo(physics.groundPoints[0].x, canvas.height);
+    for (let p of physics.groundPoints) {
+        ctx.lineTo(p.x, p.y);
+    }
+    ctx.lineTo(physics.groundPoints[physics.groundPoints.length-1].x, canvas.height);
+    ctx.fillStyle = "#333";
+    ctx.fill();
+    ctx.strokeStyle = "#4CAF50"; // Çim çizgisi
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // MOTOR ÇİZİMİ
     ctx.translate(bike.x, bike.y);
-    ctx.rotate(bike.rotation);
+    ctx.rotate(bike.angle);
 
-    // Gövde
-    ctx.fillStyle = "red";
-    ctx.fillRect(-bike.width/2, -bike.height/2, bike.width, bike.height);
-    
-    // Sürücü (Kafa)
-    ctx.beginPath();
-    ctx.arc(0, -25, 8, 0, Math.PI * 2);
-    ctx.fillStyle = "black";
-    ctx.fill();
+    // Gövde (Daha ince tasarım)
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillRect(-30, -5, 60, 10);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-10, -20, 20, 15); // Yakıt deposu alanı
 
-    // Ön Tekerlek
-    ctx.beginPath();
-    ctx.arc(bike.width/2, bike.height, bike.wheelRadius, 0, Math.PI * 2);
-    ctx.fillStyle = "#333";
+    // Tekerlekler
+    ctx.fillStyle = "#111";
+    ctx.beginPath(); // Arka
+    ctx.arc(-25, bike.suspension, bike.wheelSize, 0, Math.PI*2);
     ctx.fill();
-    ctx.strokeStyle = "white";
-    ctx.stroke();
-
-    // Arka Tekerlek
-    ctx.beginPath();
-    ctx.arc(-bike.width/2, bike.height, bike.wheelRadius, 0, Math.PI * 2);
-    ctx.fillStyle = "#333";
+    ctx.beginPath(); // Ön
+    ctx.arc(25, bike.suspension, bike.wheelSize, 0, Math.PI*2);
     ctx.fill();
-    ctx.strokeStyle = "white";
-    ctx.stroke();
 
     ctx.restore();
 }
 
-function gameLoop() {
+function loop() {
     update();
     draw();
-    requestAnimationFrame(gameLoop);
+    requestAnimationFrame(loop);
 }
-
-gameLoop();
+loop();
 </script>
 </body>
 </html>
