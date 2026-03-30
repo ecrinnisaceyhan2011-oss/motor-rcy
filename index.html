@@ -3,52 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ultimate Moto Physics Pro</title>
+    <title>Pro Moto Rider - V4</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #000; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #0a0a0a; touch-action: none; font-family: sans-serif; }
         canvas { display: block; }
-        /* Mobil Kontroller */
+        /* Kontrol Paneli */
         #ui {
-            position: absolute; bottom: 30px; width: 100%;
-            display: flex; justify-content: space-around; pointer-events: none;
+            position: absolute; bottom: 40px; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 40px;
+            box-sizing: border-box; pointer-events: none;
         }
-        .control-group { display: flex; gap: 20px; pointer-events: auto; }
         .btn {
-            width: 80px; height: 80px; background: rgba(255,255,255,0.15);
-            border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+            width: 85px; height: 85px; background: rgba(255,255,255,0.1);
+            border: 3px solid rgba(255,255,255,0.4); border-radius: 20px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-family: sans-serif;
+            color: white; font-weight: bold; pointer-events: auto;
             user-select: none; -webkit-tap-highlight-color: transparent;
         }
-        .btn:active { background: rgba(255,255,255,0.4); transform: scale(0.9); }
-        #speedo {
-            position: absolute; top: 20px; right: 20px; color: #0f0;
-            font-family: 'Courier New', monospace; font-size: 20px;
-            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;
+        .btn:active { background: rgba(0,255,100,0.4); transform: scale(0.95); }
+        .stats {
+            position: absolute; top: 20px; left: 20px; color: #fff;
+            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; border-left: 5px solid #0f0;
         }
     </style>
 </head>
 <body>
 
-<div id="speedo">000 KM/H</div>
+<div class="stats">
+    <div style="font-size: 12px; opacity: 0.7;">HIZ GÖSTERGESİ</div>
+    <div id="speed" style="font-size: 24px; font-weight: bold; color: #0f0;">00 km/h</div>
+</div>
 
 <div id="ui">
-    <div class="control-group">
-        <div class="btn" id="btnLeft">SOL</div>
-        <div class="btn" id="btnRight">SAĞ</div>
+    <div style="display: flex; gap: 20px;">
+        <div class="btn" id="left">←</div>
+        <div class="btn" id="right">→</div>
     </div>
-    <div class="control-group">
-        <div class="btn" id="btnBrake" style="color: #ff4444;">FREN</div>
-        <div class="btn" id="btnGas" style="color: #44ff44;">GAZ</div>
+    <div style="display: flex; gap: 20px;">
+        <div class="btn" id="brake" style="border-color: #f44;">FREN</div>
+        <div class="btn" id="gas" style="border-color: #0f0;">GAZ</div>
     </div>
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="game"></canvas>
 
 <script>
-const canvas = document.getElementById('c');
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const speedo = document.getElementById('speedo');
 
 let w, h;
 function resize() {
@@ -58,30 +59,164 @@ function resize() {
 window.onresize = resize;
 resize();
 
-// --- PROFESYONEL FİZİK MOTORU ---
-const world = {
-    gravity: 0.25,
-    friction: 0.98,
-    ground: []
-};
-
-// Arazi oluşturma (Daha yumuşak ve uzun bir yol)
-for(let i=0; i<2000; i++) {
-    world.ground.push({
-        x: i * 40,
-        y: h*0.7 + Math.sin(i*0.15)*30 + Math.sin(i*0.05)*70
+// --- OYUN AYARLARI ---
+const physics = { gravity: 0.3, friction: 0.985, ground: [] };
+for(let i=0; i<3000; i++) {
+    physics.ground.push({
+        x: i * 50,
+        y: h*0.75 + Math.sin(i*0.1)*50 + Math.sin(i*0.04)*100 
     });
 }
 
-const bike = {
-    x: 200, y: 300,
-    vX: 0, vY: 0,
+const player = {
+    x: 200, y: 100, vX: 0, vY: 0,
     angle: 0, vAngle: 0,
-    wheelR: 18,
-    suspension: 20, // Yayın esneme payı
-    hp: 0.6 // Motor gücü
+    wR: 20, // Tekerlek büyüklüğü
+    dist: 30 // Tekerleklerin gövdeden uzaklığı
 };
 
-const input = { gas: 0, brake: 0, left: 0, right: 0 };
+const keys = { gas: 0, brake: 0, left: 0, right: 0 };
 
-// Kontrol Fonksiyonları (Hem Mobil
+// --- KONTROL BAĞLANTILARI ---
+function bind(id, k) {
+    const el = document.getElementById(id);
+    const start = (e) => { e.preventDefault(); keys[k] = 1; };
+    const end = (e) => { e.preventDefault(); keys[k] = 0; };
+    el.onmousedown = start; el.onmouseup = end;
+    el.ontouchstart = start; el.ontouchend = end;
+}
+bind('gas', 'gas'); bind('brake', 'brake'); bind('left', 'left'); bind('right', 'right');
+
+// Klavye
+window.onkeydown = (e) => {
+    if(e.code == 'ArrowUp') keys.gas = 1;
+    if(e.code == 'ArrowDown') keys.brake = 1;
+    if(e.code == 'ArrowLeft') keys.left = 1;
+    if(e.code == 'ArrowRight') keys.right = 1;
+};
+window.onkeyup = (e) => {
+    if(e.code == 'ArrowUp') keys.gas = 0;
+    if(e.code == 'ArrowDown') keys.brake = 0;
+    if(e.code == 'ArrowLeft') keys.left = 0;
+    if(e.code == 'ArrowRight') keys.right = 0;
+};
+
+function getFloor(x) {
+    const i = Math.floor(x / 50);
+    if(i < 0) return h;
+    const p1 = physics.ground[i];
+    const p2 = physics.ground[i+1] || p1;
+    const t = (x - p1.x) / 50;
+    return p1.y + t * (p2.y - p1.y);
+}
+
+function update() {
+    if(keys.gas) player.vX += 0.5;
+    if(keys.brake) player.vX -= 0.3;
+    if(keys.left) player.vAngle -= 0.007;
+    if(keys.right) player.vAngle += 0.007;
+
+    player.vY += physics.gravity;
+    player.vX *= physics.friction;
+    player.vAngle *= 0.92;
+
+    player.x += player.vX;
+    player.y += player.vY;
+    player.angle += player.vAngle;
+
+    // Tekerleklerin yere çarpma kontrolü
+    const cos = Math.cos(player.angle);
+    const sin = Math.sin(player.angle);
+    
+    // Arka ve ön tekerlek noktaları
+    const wheels = [
+        { x: player.x - cos*player.dist, y: player.y - sin*player.dist + 15 },
+        { x: player.x + cos*player.dist, y: player.y + sin*player.dist + 15 }
+    ];
+
+    wheels.forEach((w, i) => {
+        const floorY = getFloor(w.x);
+        if(w.y + player.wR > floorY) {
+            player.y -= (w.y + player.wR - floorY) * 0.8;
+            player.vY *= 0.2;
+            // Yere değince motorun açısını araziye uydur
+            if(i == 0) player.vAngle += 0.01; else player.vAngle -= 0.01;
+        }
+    });
+
+    document.getElementById('speed').innerText = Math.floor(Math.abs(player.vX * 6)) + " km/h";
+}
+
+function drawMotor(ctx) {
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    // --- MOTOR GÖVDESİ ---
+    ctx.fillStyle = "#e74c3c"; // Ana renk Kırmızı
+    ctx.beginPath();
+    ctx.moveTo(-25, 0);
+    ctx.lineTo(20, 0); 
+    ctx.lineTo(25, -15); // Ön panel
+    ctx.lineTo(5, -20);  // Depo üstü
+    ctx.lineTo(-20, -15); // Sele altı
+    ctx.closePath();
+    ctx.fill();
+    
+    // Motor Blogu (Gri kısım)
+    ctx.fillStyle = "#555";
+    ctx.fillRect(-10, 0, 20, 15);
+
+    // Gidon ve Kask
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(15, -15); ctx.lineTo(22, -30); ctx.stroke();
+    ctx.fillStyle = "#3498db"; // Kask Mavi
+    ctx.beginPath(); ctx.arc(5, -35, 8, 0, 7); ctx.fill();
+
+    // TEKERLEKLER (Detaylı Jantlı)
+    const drawWheel = (x, y) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(player.x * 0.1); // Hareket ettikçe döner
+        ctx.fillStyle = "#222";
+        ctx.beginPath(); ctx.arc(0, 0, player.wR, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#666";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-player.wR, 0); ctx.lineTo(player.wR, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -player.wR); ctx.lineTo(0, player.wR); ctx.stroke();
+        ctx.restore();
+    };
+
+    drawWheel(-player.dist, 15); // Arka
+    drawWheel(player.dist, 15);  // Ön
+
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.translate(-player.x + 200, 0); // Kamera
+
+    // Arazi
+    ctx.beginPath();
+    ctx.moveTo(physics.ground[0].x, h);
+    for(let p of physics.ground) ctx.lineTo(p.x, p.y);
+    ctx.lineTo(physics.ground[physics.ground.length-1].x, h);
+    ctx.fillStyle = "#222"; ctx.fill();
+    ctx.strokeStyle = "#0f0"; ctx.lineWidth = 3; ctx.stroke();
+
+    drawMotor(ctx);
+
+    ctx.restore();
+    requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
